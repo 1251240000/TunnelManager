@@ -74,17 +74,18 @@ def boot() -> None:
     ensure_started()
 
 
-def row_to_form(row: sqlite3.Row | None = None) -> dict[str, Any]:
+def default_key_path() -> str:
+    return os.environ.get("DEFAULT_SSH_KEY_PATH") or os.environ.get("SSH_KEY_RUNTIME_PATH", "/data/ssh/tunnel_key")
+
+
+def host_to_form(row: sqlite3.Row | None = None) -> dict[str, Any]:
     defaults = {
         "name": "",
         "remote_user": os.environ.get("DEFAULT_SSH_REMOTE_USER", "root"),
         "remote_host": os.environ.get("DEFAULT_SSH_REMOTE_HOST", ""),
         "ssh_port": os.environ.get("DEFAULT_SSH_REMOTE_PORT", "22"),
         "remote_bind_ip": os.environ.get("DEFAULT_SSH_BIND_IP", "0.0.0.0"),
-        "remote_bind_port": "",
-        "target_host": "",
-        "target_port": "",
-        "ssh_key_path": os.environ.get("DEFAULT_SSH_KEY_PATH", "/id_rsa"),
+        "ssh_key_path": default_key_path(),
         "extra_args": os.environ.get("DEFAULT_AUTOSSH_EXTRA_ARGS", ""),
         "enabled": "1",
     }
@@ -98,70 +99,219 @@ def row_to_form(row: sqlite3.Row | None = None) -> dict[str, Any]:
     return data
 
 
-def parse_form() -> tuple[dict[str, Any], list[str]]:
-    fields = row_to_form()
-    data: dict[str, Any] = {}
+def tunnel_to_form(row: sqlite3.Row | None = None) -> dict[str, Any]:
+    defaults = {
+        "name": "",
+        "host_id": "",
+        "target_host": "",
+        "port_mappings": "",
+        "enabled": "1",
+    }
+    if row is None:
+        return defaults
+    data = dict(defaults)
+    for key in ("name", "host_id", "target_host"):
+        data[key] = str(row[key])
+    data["port_mappings"] = manager.format_port_mappings(row["port_mappings"])
+    data["enabled"] = "1" if row["enabled"] else "0"
+    return data
+
+
+def parse_host_form() -> tuple[dict[str, Any], list[str]]:
+    data = {key: request.form.get(key, "").strip() for key in host_to_form()}
     errors: list[str] = []
 
-    for key in fields:
-        data[key] = request.form.get(key, "").strip()
-
-    required = [
-        "name",
-        "remote_user",
-        "remote_host",
-        "ssh_port",
-        "remote_bind_ip",
-        "remote_bind_port",
-        "target_host",
-        "target_port",
-        "ssh_key_path",
-    ]
+    required = ["name", "remote_user", "remote_host", "ssh_port", "remote_bind_ip", "ssh_key_path"]
     for key in required:
         if not data[key]:
             errors.append(f"{key} is required")
 
-    for key in ("ssh_port", "remote_bind_port", "target_port"):
-        try:
-            value = int(data[key])
-            if value < 1 or value > 65535:
-                raise ValueError
-            data[key] = value
-        except ValueError:
-            errors.append(f"{key} must be a port between 1 and 65535")
+    try:
+        data["ssh_port"] = parse_port(data["ssh_port"])
+    except ValueError:
+        errors.append("ssh_port must be a port between 1 and 65535")
 
     data["enabled"] = 1 if request.form.get("enabled") == "1" else 0
     return data, errors
 
 
+def parse_tunnel_form() -> tuple[dict[str, Any], list[str]]:
+    data = {key: request.form.get(key, "").strip() for key in tunnel_to_form()}
+    errors: list[str] = []
+
+    for key in ("name", "host_id", "target_host", "port_mappings"):
+        if not data[key]:
+            errors.append(f"{key} is required")
+
+    try:
+        data["host_id"] = int(data["host_id"])
+        if manager.get_host(data["host_id"]) is None:
+            errors.append("host_id does not exist")
+    except ValueError:
+        errors.append("host_id is required")
+
+    try:
+        mappings = manager.parse_port_mappings(data["port_mappings"])
+        data["port_mappings"] = manager.encode_port_mappings(mappings)
+        data["port_mappings_text"] = manager.format_port_mappings(mappings)
+    except ValueError as exc:
+        errors.append(f"port_mappings is invalid: {exc}")
+        data["port_mappings_text"] = data["port_mappings"]
+
+    data["enabled"] = 1 if request.form.get("enabled") == "1" else 0
+    return data, errors
+
+
+def parse_port(value: str) -> int:
+    port = int(value)
+    if port < 1 or port > 65535:
+        raise ValueError
+    return port
+
+
+def tunnel_view(row: sqlite3.Row) -> dict[str, Any]:
+    data = dict(row)
+    mappings = manager.decode_port_mappings(row["port_mappings"])
+    data["mappings"] = mappings
+    data["mapping_text"] = manager.format_port_mappings(mappings)
+    data["entrances"] = [f"{row['remote_bind_ip']}:{item['remote_port']}" for item in mappings]
+    data["targets"] = [f"{row['target_host']}:{item['target_port']}" for item in mappings]
+    return data
+
+
+def host_usage_counts() -> dict[int, int]:
+    counts: dict[int, int] = {}
+    for tunnel in manager.list_tunnels():
+        counts[tunnel["host_id"]] = counts.get(tunnel["host_id"], 0) + 1
+    return counts
+
+
 @app.get("/")
 @require_auth
 def index():
-    tunnels = manager.list_tunnels()
+    tunnels = [tunnel_view(row) for row in manager.list_tunnels()]
     statuses = manager.statuses()
-    return render_template("index.html", tunnels=tunnels, statuses=statuses)
+    hosts = manager.list_hosts()
+    return render_template("index.html", tunnels=tunnels, statuses=statuses, hosts=hosts)
+
+
+@app.get("/hosts")
+@require_auth
+def hosts():
+    counts = host_usage_counts()
+    rows = []
+    for host in manager.list_hosts():
+        item = dict(host)
+        item["tunnel_count"] = counts.get(host["id"], 0)
+        rows.append(item)
+    return render_template("hosts.html", hosts=rows)
+
+
+@app.get("/hosts/new")
+@require_auth
+def new_host():
+    return render_template("host_form.html", host=None, form=host_to_form(), action=url_for("create_host"))
+
+
+@app.post("/hosts")
+@require_auth
+def create_host():
+    data, errors = parse_host_form()
+    if errors:
+        for error in errors:
+            flash(error, "error")
+        return render_template("host_form.html", host=None, form=data, action=url_for("create_host")), 400
+
+    try:
+        manager.create_host(data)
+    except sqlite3.IntegrityError:
+        flash("Host name already exists", "error")
+        return render_template("host_form.html", host=None, form=data, action=url_for("create_host")), 409
+    flash("Host created", "ok")
+    return redirect(url_for("hosts"))
+
+
+@app.get("/hosts/<int:host_id>/edit")
+@require_auth
+def edit_host(host_id: int):
+    host = manager.get_host(host_id)
+    if host is None:
+        flash("Host not found", "error")
+        return redirect(url_for("hosts"))
+    return render_template("host_form.html", host=host, form=host_to_form(host), action=url_for("update_host", host_id=host_id))
+
+
+@app.post("/hosts/<int:host_id>")
+@require_auth
+def update_host(host_id: int):
+    host = manager.get_host(host_id)
+    if host is None:
+        flash("Host not found", "error")
+        return redirect(url_for("hosts"))
+
+    data, errors = parse_host_form()
+    if errors:
+        for error in errors:
+            flash(error, "error")
+        return render_template("host_form.html", host=host, form=data, action=url_for("update_host", host_id=host_id)), 400
+
+    try:
+        manager.update_host(host_id, data)
+    except sqlite3.IntegrityError:
+        flash("Host name already exists", "error")
+        return render_template("host_form.html", host=host, form=data, action=url_for("update_host", host_id=host_id)), 409
+
+    for tunnel in manager.list_tunnels(host_id=host_id):
+        if data["enabled"] and tunnel["enabled"]:
+            manager.restart_tunnel(tunnel["id"])
+        else:
+            manager.stop_tunnel(tunnel["id"])
+    flash("Host updated", "ok")
+    return redirect(url_for("hosts"))
+
+
+@app.post("/hosts/<int:host_id>/delete")
+@require_auth
+def delete_host(host_id: int):
+    if manager.list_tunnels(host_id=host_id):
+        flash("Host has tunnels; delete or move those tunnels first", "error")
+        return redirect(url_for("hosts"))
+    try:
+        manager.delete_host(host_id)
+    except sqlite3.IntegrityError:
+        flash("Host has tunnels; delete or move those tunnels first", "error")
+        return redirect(url_for("hosts"))
+    flash("Host deleted", "ok")
+    return redirect(url_for("hosts"))
 
 
 @app.get("/tunnels/new")
 @require_auth
 def new_tunnel():
-    return render_template("form.html", tunnel=None, form=row_to_form(), action=url_for("create_tunnel"))
+    hosts = manager.list_hosts()
+    if not hosts:
+        flash("Create an SSH host before adding tunnels", "error")
+        return redirect(url_for("new_host"))
+    return render_template("tunnel_form.html", tunnel=None, form=tunnel_to_form(), hosts=hosts, action=url_for("create_tunnel"))
 
 
 @app.post("/tunnels")
 @require_auth
 def create_tunnel():
-    data, errors = parse_form()
+    hosts = manager.list_hosts()
+    data, errors = parse_tunnel_form()
+    form = dict(data)
+    form["port_mappings"] = data.get("port_mappings_text", request.form.get("port_mappings", ""))
     if errors:
         for error in errors:
             flash(error, "error")
-        return render_template("form.html", tunnel=None, form=data, action=url_for("create_tunnel")), 400
+        return render_template("tunnel_form.html", tunnel=None, form=form, hosts=hosts, action=url_for("create_tunnel")), 400
 
     try:
         tunnel_id = manager.create_tunnel(data)
     except sqlite3.IntegrityError:
-        flash("Remote bind endpoint already exists", "error")
-        return render_template("form.html", tunnel=None, form=data, action=url_for("create_tunnel")), 409
+        flash("Failed to create tunnel", "error")
+        return render_template("tunnel_form.html", tunnel=None, form=form, hosts=hosts, action=url_for("create_tunnel")), 409
     if data["enabled"]:
         if not manager.start_tunnel(tunnel_id):
             flash("Tunnel saved but failed to start; check logs", "error")
@@ -177,7 +327,13 @@ def edit_tunnel(tunnel_id: int):
     if tunnel is None:
         flash("Tunnel not found", "error")
         return redirect(url_for("index"))
-    return render_template("form.html", tunnel=tunnel, form=row_to_form(tunnel), action=url_for("update_tunnel", tunnel_id=tunnel_id))
+    return render_template(
+        "tunnel_form.html",
+        tunnel=tunnel,
+        form=tunnel_to_form(tunnel),
+        hosts=manager.list_hosts(),
+        action=url_for("update_tunnel", tunnel_id=tunnel_id),
+    )
 
 
 @app.post("/tunnels/<int:tunnel_id>")
@@ -188,17 +344,20 @@ def update_tunnel(tunnel_id: int):
         flash("Tunnel not found", "error")
         return redirect(url_for("index"))
 
-    data, errors = parse_form()
+    hosts = manager.list_hosts()
+    data, errors = parse_tunnel_form()
+    form = dict(data)
+    form["port_mappings"] = data.get("port_mappings_text", request.form.get("port_mappings", ""))
     if errors:
         for error in errors:
             flash(error, "error")
-        return render_template("form.html", tunnel=tunnel, form=data, action=url_for("update_tunnel", tunnel_id=tunnel_id)), 400
+        return render_template("tunnel_form.html", tunnel=tunnel, form=form, hosts=hosts, action=url_for("update_tunnel", tunnel_id=tunnel_id)), 400
 
     try:
         manager.update_tunnel(tunnel_id, data)
     except sqlite3.IntegrityError:
-        flash("Remote bind endpoint already exists", "error")
-        return render_template("form.html", tunnel=tunnel, form=data, action=url_for("update_tunnel", tunnel_id=tunnel_id)), 409
+        flash("Failed to update tunnel", "error")
+        return render_template("tunnel_form.html", tunnel=tunnel, form=form, hosts=hosts, action=url_for("update_tunnel", tunnel_id=tunnel_id)), 409
 
     if data["enabled"]:
         if not manager.restart_tunnel(tunnel_id):
@@ -256,7 +415,7 @@ def logs(tunnel_id: int):
     if tunnel is None:
         flash("Tunnel not found", "error")
         return redirect(url_for("index"))
-    return render_template("logs.html", tunnel=tunnel, log_text=manager.read_log(tunnel_id))
+    return render_template("logs.html", tunnel=tunnel_view(tunnel), log_text=manager.read_log(tunnel_id))
 
 
 @app.get("/api/status")
@@ -265,7 +424,7 @@ def api_status():
     payload = []
     statuses = manager.statuses()
     for tunnel in manager.list_tunnels():
-        item = dict(tunnel)
+        item = tunnel_view(tunnel)
         item["status"] = statuses.get(tunnel["id"], {"state": "stopped"})
         payload.append(item)
     return jsonify({"now": datetime.utcnow().isoformat() + "Z", "tunnels": payload})

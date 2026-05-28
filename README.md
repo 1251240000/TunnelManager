@@ -16,7 +16,7 @@ hrlu.cn:3389  -> 10.1.1.12:3389
 autossh -M 0 -N -p 60022 -i /data/ssh/tunnel_key -R 0.0.0.0:3000:10.1.1.8:3000 root@hrlu.cn
 ```
 
-每个外网监听端口是一条独立规则，可以在 Web 页面中启动、停止、重启、编辑和查看日志。
+外网 SSH 主机独立管理，转发规则只需要选择对应外网主机。一个转发规则可以包含多个端口映射，例如 `3000,10080,2222:22` 会生成多个 `-R` 参数，并作为同一个 autossh 进程一起启停。
 
 ## 部署
 
@@ -43,15 +43,18 @@ http://服务器IP:8080
 
 ## 配置说明
 
-主要字段：
+外网主机字段：
 
 - `外网 SSH 主机`：运行 sshd 的公网服务器，例如 `hrlu.cn`
 - `外网 SSH 端口`：公网服务器 sshd 端口，例如 `60022`
 - `外网监听 IP`：通常是 `0.0.0.0`
-- `外网监听端口`：公网服务器对外开放的端口，例如 `3000`
-- `内网目标主机`：本地网络里的服务 IP，例如 `10.1.1.8`
-- `内网目标端口`：本地服务端口，例如 `3000`
 - `SSH 私钥路径`：容器内运行时路径，compose 示例为 `/data/ssh/tunnel_key`
+
+转发规则字段：
+
+- `外网主机`：选择已创建的外网 SSH 主机
+- `内网目标主机`：本地网络里的服务 IP，例如 `10.1.1.8`
+- `端口映射`：支持每行、逗号或分号分隔；`3000` 表示 `3000:3000`，`2222:22` 表示外网 `2222` 到内网 `22`
 
 ## SSH 私钥权限
 
@@ -86,7 +89,17 @@ chmod 600 ~/.ssh/id_rsa
 
 ## 首次导入
 
-当 `/data/tunnels.db` 为空时，程序会读取 `BOOTSTRAP_TUNNELS` 导入初始规则。数据库创建后，后续修改以 Web 页面为准。
+当前版本将外网主机和转发规则拆分为独立表。旧版数据库不会迁移历史数据；容器启动时会重建为新结构。
+
+当 `/data/tunnels.db` 为空时，程序可读取 `BOOTSTRAP_HOSTS` 和 `BOOTSTRAP_TUNNELS` 导入初始规则。数据库创建后，后续修改以 Web 页面为准。
+
+示例：
+
+```yaml
+environment:
+  - BOOTSTRAP_HOSTS=[{"name":"hrlu-cn","remote_user":"root","remote_host":"hrlu.cn","ssh_port":60022,"remote_bind_ip":"0.0.0.0","ssh_key_path":"/data/ssh/tunnel_key","enabled":1}]
+  - BOOTSTRAP_TUNNELS=[{"name":"dpannel-linux","host_name":"hrlu-cn","target_host":"10.1.1.8","port_mappings":"3000,10080","enabled":1},{"name":"windows-10-rdp","host_name":"hrlu-cn","target_host":"10.1.1.12","port_mappings":"3389","enabled":1}]
+```
 
 也兼容单服务旧环境变量：
 

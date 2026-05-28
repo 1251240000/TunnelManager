@@ -6,6 +6,10 @@
       <span class="label">转发规则</span>
     </div>
     <div>
+      <span class="metric">{{ hosts|length }}</span>
+      <span class="label">外网主机</span>
+    </div>
+    <div>
       <span class="metric">{{ statuses.values() | selectattr("state", "equalto", "running") | list | length }}</span>
       <span class="label">运行中</span>
     </div>
@@ -18,7 +22,7 @@
           <th>名称</th>
           <th>外网入口</th>
           <th>内网目标</th>
-          <th>SSH</th>
+          <th>外网主机</th>
           <th>状态</th>
           <th>操作</th>
         </tr>
@@ -31,9 +35,20 @@
               <strong>{{ tunnel.name }}</strong>
               <span class="sub">#{{ tunnel.id }}</span>
             </td>
-            <td>{{ tunnel.remote_bind_ip }}:{{ tunnel.remote_bind_port }}</td>
-            <td>{{ tunnel.target_host }}:{{ tunnel.target_port }}</td>
-            <td>{{ tunnel.remote_user }}@{{ tunnel.remote_host }}:{{ tunnel.ssh_port }}</td>
+            <td>
+              {% for entrance in tunnel.entrances %}
+                <span class="mono-line">{{ entrance }}</span>
+              {% endfor %}
+            </td>
+            <td>
+              {% for target in tunnel.targets %}
+                <span class="mono-line">{{ target }}</span>
+              {% endfor %}
+            </td>
+            <td>
+              <strong>{{ tunnel.host_name }}</strong>
+              <span class="sub">{{ tunnel.remote_user }}@{{ tunnel.remote_host }}:{{ tunnel.ssh_port }}</span>
+            </td>
             <td>
               <span class="badge {{ status.state }}">{{ status.state }}</span>
               {% if status.pid %}<span class="sub">pid {{ status.pid }}</span>{% endif %}

@@ -43,6 +43,11 @@ a {
   border-bottom: 1px solid var(--line);
 }
 
+.topbar nav {
+  display: flex;
+  gap: 8px;
+}
+
 .brand {
   font-size: 17px;
   font-weight: 700;
@@ -55,7 +60,7 @@ a {
 
 .summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 160px));
+  grid-template-columns: repeat(3, minmax(0, 160px));
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -80,9 +85,21 @@ a {
 }
 
 .label,
-.sub {
+.sub,
+.hint {
   color: var(--muted);
   font-size: 12px;
+}
+
+.hint {
+  font-weight: 400;
+}
+
+.mono-line {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1.45;
+  white-space: nowrap;
 }
 
 .table-wrap {
@@ -231,6 +248,15 @@ button:hover,
   gap: 12px;
 }
 
+.page-head {
+  margin-bottom: 14px;
+}
+
+.page-head h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -249,7 +275,9 @@ label {
   font-weight: 600;
 }
 
-input {
+input,
+select,
+textarea {
   width: 100%;
   min-height: 38px;
   padding: 8px 10px;
@@ -257,9 +285,16 @@ input {
   border-radius: 6px;
   color: var(--text);
   font: inherit;
+  background: #fff;
 }
 
-input:focus {
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
   border-color: var(--primary);
   outline: 2px solid rgba(23, 105, 170, 0.15);
 }
