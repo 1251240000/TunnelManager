@@ -1,6 +1,7 @@
 services:
   tunnel-manager:
     build: .
+    image: tunnel-manager:latest
     container_name: tunnel-manager
     restart: always
     ports:
@@ -13,13 +14,14 @@ services:
       # - DEFAULT_SSH_REMOTE_HOST=hrlu.cn
       # - DEFAULT_SSH_REMOTE_PORT=60022
       # - DEFAULT_SSH_BIND_IP=0.0.0.0
-      - SSH_KEY_SOURCE_PATH=/run/secrets/tunnel_id_rsa
-      - SSH_KEY_RUNTIME_PATH=/data/ssh/id_rsa
-      - DEFAULT_SSH_KEY_PATH=/data/ssh/id_rsa
+      - SSH_KEY_DIR=/host_ssh
+      # 可选：指定私钥文件名；不设置时自动按 id_ed25519、id_rsa、id_ecdsa、id_dsa 查找。
+      # - SSH_KEY_NAME=id_ed25519
+      - SSH_KEY_RUNTIME_PATH=/data/ssh/tunnel_key
       - STRICT_HOST_KEY_CHECKING=StrictHostKeyChecking=accept-new
     volumes:
       - ./data:/data
-      - ${HOME}/.ssh/id_rsa:/run/secrets/tunnel_id_rsa:ro
+      - ${HOME}/.ssh:/host_ssh:ro
     dns:
       - 114.114.114.114
       - 8.8.8.8

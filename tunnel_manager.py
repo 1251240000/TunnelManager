@@ -187,7 +187,17 @@ class TunnelManager:
 
         old_paths = [
             path
-            for path in ("~/.ssh/id_rsa", "/id_rsa", "/run/secrets/tunnel_id_rsa")
+            for path in (
+                "~/.ssh/id_rsa",
+                "~/.ssh/id_ed25519",
+                "/id_rsa",
+                "/run/secrets/tunnel_id_rsa",
+                "/host_ssh/id_rsa",
+                "/host_ssh/id_ed25519",
+                "/host_ssh/id_ecdsa",
+                "/host_ssh/id_dsa",
+                "/data/ssh/id_rsa",
+            )
             if path != runtime_path
         ]
         if not old_paths:

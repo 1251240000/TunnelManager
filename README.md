@@ -13,7 +13,7 @@ hrlu.cn:3389  -> 10.1.1.12:3389
 实现方式是容器内执行：
 
 ```bash
-autossh -M 0 -N -p 60022 -i /data/ssh/id_rsa -R 0.0.0.0:3000:10.1.1.8:3000 root@hrlu.cn
+autossh -M 0 -N -p 60022 -i /data/ssh/tunnel_key -R 0.0.0.0:3000:10.1.1.8:3000 root@hrlu.cn
 ```
 
 每个外网监听端口是一条独立规则，可以在 Web 页面中启动、停止、重启、编辑和查看日志。
@@ -51,7 +51,7 @@ http://服务器IP:8080
 - `外网监听端口`：公网服务器对外开放的端口，例如 `3000`
 - `内网目标主机`：本地网络里的服务 IP，例如 `10.1.1.8`
 - `内网目标端口`：本地服务端口，例如 `3000`
-- `SSH 私钥路径`：容器内运行时路径，compose 示例为 `/data/ssh/id_rsa`
+- `SSH 私钥路径`：容器内运行时路径，compose 示例为 `/data/ssh/tunnel_key`
 
 ## SSH 私钥权限
 
@@ -62,14 +62,20 @@ WARNING: UNPROTECTED PRIVATE KEY FILE!
 Permissions 0644 for 'id_rsa' are too open.
 ```
 
-compose 中不要把私钥直接挂到 `~/.ssh/id_rsa` 作为容器内路径；容器内路径应使用绝对路径。当前配置会把宿主机 `${HOME}/.ssh/id_rsa` 只读挂载到 `/run/secrets/tunnel_id_rsa`，容器启动时复制到 `/data/ssh/id_rsa`，并自动设置：
+compose 中不要把私钥直接挂到 `~/.ssh/id_rsa` 作为容器内路径；容器内路径应使用绝对路径。也不要直接 bind 单个私钥文件，否则宿主机文件不存在时 Docker 可能创建同名目录。当前配置会把宿主机 `${HOME}/.ssh` 目录只读挂载到 `/host_ssh`，容器启动时自动查找 `id_ed25519`、`id_rsa`、`id_ecdsa`、`id_dsa`，复制找到的私钥到 `/data/ssh/tunnel_key`，并自动设置：
 
 ```text
 chmod 700 /data/ssh
-chmod 600 /data/ssh/id_rsa
+chmod 600 /data/ssh/tunnel_key
 ```
 
-程序启动时也会把数据库里已保存的旧默认路径 `~/.ssh/id_rsa`、`/id_rsa`、`/run/secrets/tunnel_id_rsa` 自动改为当前 `SSH_KEY_RUNTIME_PATH`，避免旧规则继续使用权限不正确的挂载路径。
+如果要明确指定私钥文件名，可以在 compose 环境变量中设置：
+
+```yaml
+- SSH_KEY_NAME=id_ed25519
+```
+
+程序启动时也会把数据库里已保存的旧默认路径自动改为当前 `SSH_KEY_RUNTIME_PATH`，避免旧规则继续使用权限不正确的挂载路径。
 
 如果宿主机本身也要直接使用该私钥，建议同时执行：
 
