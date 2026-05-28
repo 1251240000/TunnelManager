@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="summary">
+    <div>
+      <span class="metric">{{ tunnels|length }}</span>
+      <span class="label">转发规则</span>
+    </div>
+    <div>
+      <span class="metric">{{ statuses.values() | selectattr("state", "equalto", "running") | list | length }}</span>
+      <span class="label">运行中</span>
+    </div>
+  </section>
+
+  <section class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>名称</th>
+          <th>外网入口</th>
+          <th>内网目标</th>
+          <th>SSH</th>
+          <th>状态</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tunnel in tunnels %}
+          {% set status = statuses.get(tunnel.id, {"state": "stopped"}) %}
+          <tr>
+            <td>
+              <strong>{{ tunnel.name }}</strong>
+              <span class="sub">#{{ tunnel.id }}</span>
+            </td>
+            <td>{{ tunnel.remote_bind_ip }}:{{ tunnel.remote_bind_port }}</td>
+            <td>{{ tunnel.target_host }}:{{ tunnel.target_port }}</td>
+            <td>{{ tunnel.remote_user }}@{{ tunnel.remote_host }}:{{ tunnel.ssh_port }}</td>
+            <td>
+              <span class="badge {{ status.state }}">{{ status.state }}</span>
+              {% if status.pid %}<span class="sub">pid {{ status.pid }}</span>{% endif %}
+            </td>
+            <td class="actions">
+              <form method="post" action="{{ url_for('start_tunnel', tunnel_id=tunnel.id) }}"><button type="submit">启动</button></form>
+              <form method="post" action="{{ url_for('stop_tunnel', tunnel_id=tunnel.id) }}"><button type="submit">停止</button></form>
+              <form method="post" action="{{ url_for('restart_tunnel', tunnel_id=tunnel.id) }}"><button type="submit">重启</button></form>
+              <a class="button" href="{{ url_for('edit_tunnel', tunnel_id=tunnel.id) }}">编辑</a>
+              <a class="button" href="{{ url_for('logs', tunnel_id=tunnel.id) }}">日志</a>
+              <form method="post" action="{{ url_for('delete_tunnel', tunnel_id=tunnel.id) }}" onsubmit="return confirm('确认删除这条转发？')"><button class="danger" type="submit">删除</button></form>
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="6" class="empty">暂无转发规则</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

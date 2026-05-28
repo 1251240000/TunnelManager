@@ -1,0 +1,25 @@
+services:
+  tunnel-manager:
+    build: .
+    container_name: tunnel-manager
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=change-this-password
+      - SECRET_KEY=change-this-secret
+      # - DEFAULT_SSH_REMOTE_USER=root
+      # - DEFAULT_SSH_REMOTE_HOST=hrlu.cn
+      # - DEFAULT_SSH_REMOTE_PORT=60022
+      # - DEFAULT_SSH_BIND_IP=0.0.0.0
+      - SSH_KEY_SOURCE_PATH=/run/secrets/tunnel_id_rsa
+      - SSH_KEY_RUNTIME_PATH=/data/ssh/id_rsa
+      - DEFAULT_SSH_KEY_PATH=/data/ssh/id_rsa
+      - STRICT_HOST_KEY_CHECKING=StrictHostKeyChecking=accept-new
+    volumes:
+      - ./data:/data
+      - ${HOME}/.ssh/id_rsa:/run/secrets/tunnel_id_rsa:ro
+    dns:
+      - 114.114.114.114
+      - 8.8.8.8

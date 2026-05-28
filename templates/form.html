@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+  <form class="panel form-grid" method="post" action="{{ action }}">
+    <h1>{{ "编辑转发" if tunnel else "新增转发" }}</h1>
+
+    <label>
+      <span>名称</span>
+      <input name="name" value="{{ form.name }}" placeholder="dpannel-3000" required>
+    </label>
+
+    <label>
+      <span>外网 SSH 用户</span>
+      <input name="remote_user" value="{{ form.remote_user }}" required>
+    </label>
+
+    <label>
+      <span>外网 SSH 主机</span>
+      <input name="remote_host" value="{{ form.remote_host }}" placeholder="hrlu.cn" required>
+    </label>
+
+    <label>
+      <span>外网 SSH 端口</span>
+      <input name="ssh_port" type="number" min="1" max="65535" value="{{ form.ssh_port }}" required>
+    </label>
+
+    <label>
+      <span>外网监听 IP</span>
+      <input name="remote_bind_ip" value="{{ form.remote_bind_ip }}" required>
+    </label>
+
+    <label>
+      <span>外网监听端口</span>
+      <input name="remote_bind_port" type="number" min="1" max="65535" value="{{ form.remote_bind_port }}" required>
+    </label>
+
+    <label>
+      <span>内网目标主机</span>
+      <input name="target_host" value="{{ form.target_host }}" placeholder="10.1.1.8" required>
+    </label>
+
+    <label>
+      <span>内网目标端口</span>
+      <input name="target_port" type="number" min="1" max="65535" value="{{ form.target_port }}" required>
+    </label>
+
+    <label>
+      <span>SSH 私钥路径</span>
+      <input name="ssh_key_path" value="{{ form.ssh_key_path }}" required>
+    </label>
+
+    <label class="wide">
+      <span>额外 autossh/ssh 参数</span>
+      <input name="extra_args" value="{{ form.extra_args }}" placeholder="-o UserKnownHostsFile=/data/known_hosts">
+    </label>
+
+    <label class="check wide">
+      <input type="checkbox" name="enabled" value="1" {% if form.enabled == "1" %}checked{% endif %}>
+      <span>保存后自动保持运行</span>
+    </label>
+
+    <div class="form-actions wide">
+      <button class="primary" type="submit">保存</button>
+      <a class="button" href="{{ url_for('index') }}">返回</a>
+    </div>
+  </form>
+{% endblock %}

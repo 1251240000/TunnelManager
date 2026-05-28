@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-head">
+      <h1>{{ tunnel.name }} 日志</h1>
+      <a class="button" href="{{ url_for('index') }}">返回</a>
+    </div>
+    <pre class="log">{{ log_text or "暂无日志" }}</pre>
+  </section>
+{% endblock %}
