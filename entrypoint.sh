@@ -26,6 +26,13 @@ if [ -n "$SSH_KEY_SOURCE_PATH" ] && [ -f "$SSH_KEY_SOURCE_PATH" ]; then
   chmod 600 "$SSH_KEY_RUNTIME_PATH"
 else
   echo "warning: no SSH private key found under $SSH_KEY_DIR" >&2
+  echo "warning: looked for SSH_KEY_NAME or id_ed25519, id_rsa, id_ecdsa, id_dsa" >&2
+  if [ -d "$SSH_KEY_DIR" ]; then
+    echo "warning: $SSH_KEY_DIR contains:" >&2
+    ls -la "$SSH_KEY_DIR" >&2
+  else
+    echo "warning: $SSH_KEY_DIR is not a directory" >&2
+  fi
 fi
 
 export DEFAULT_SSH_KEY_PATH="${DEFAULT_SSH_KEY_PATH:-$SSH_KEY_RUNTIME_PATH}"

@@ -271,6 +271,22 @@ class TunnelManager:
             log_file = log_path.open("ab", buffering=0)
             log_file.write(f"\n[{datetime.utcnow().isoformat()}Z] starting: {' '.join(command)}\n".encode())
 
+            key_path = Path(tunnel["ssh_key_path"])
+            if not key_path.is_file():
+                log_file.write(
+                    (
+                        f"[{datetime.utcnow().isoformat()}Z] failed: SSH private key not found: {key_path}. "
+                        "Mount ${HOME}/.ssh to /host_ssh, set SSH_KEY_NAME if needed, then recreate the container.\n"
+                    ).encode()
+                )
+                log_file.close()
+                return False
+            try:
+                key_path.parent.chmod(0o700)
+                key_path.chmod(0o600)
+            except OSError as exc:
+                log_file.write(f"[{datetime.utcnow().isoformat()}Z] warning: could not chmod SSH key: {exc}\n".encode())
+
             env = os.environ.copy()
             env.setdefault("AUTOSSH_GATETIME", "0")
             env.setdefault("AUTOSSH_LOGLEVEL", "7")
